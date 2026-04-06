@@ -1,0 +1,6 @@
+DEFAULT_AUTH_FILE = "auth.json"
+DEFAULT_OUTPUT_DIR = "output"
+DEFAULT_STATE_FILE = "search_state.json"
+DEFAULT_MAX_POSTS_NEW_KEYWORD = 10
+DEFAULT_SCROLL_ATTEMPTS = 3
+THREADS_SEARCH_URL = "https://www.threads.net/search"
