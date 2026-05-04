@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-Telegram-бот для керування Threads-парсером.
-
-Команди:
-  /start        — головне меню з кнопками
-  /list         — список ключових слів
-  /add <слово>  — додати ключове слово
-  /remove <слово> — видалити ключове слово
-  /run          — запустити парсинг зараз
-  /status       — статус останнього запуску
-"""
 
 import json
 import logging
@@ -20,61 +9,63 @@ from typing import List
 
 import httpx
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger(__name__)
-
-# ---------- config ----------
 from constants import (
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID,
-    KEYWORDS_FILE,
     DEFAULT_AUTH_FILE,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_MAX_POSTS_NEW_KEYWORD,
     DEFAULT_SCROLL_ATTEMPTS,
+    KEYWORDS_FILE,
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
 )
 
-if not TELEGRAM_BOT_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN is empty")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
-if not TELEGRAM_CHAT_ID:
-    raise RuntimeError("TELEGRAM_CHAT_ID is empty")
-
-if not KEYWORDS_FILE:
-    raise RuntimeError("KEYWORDS_FILE is empty")
-
+BASE_DIR = Path(__file__).resolve().parent
+KEYWORDS_PATH = BASE_DIR / KEYWORDS_FILE
+SCRAPER_PATH = BASE_DIR / "threads_scraper.py"
 API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
-# ---------- keywords store ----------
+_pending_action = {}
+
 
 def load_keywords() -> List[str]:
-    p = Path(KEYWORDS_FILE)
-    if p.exists():
-        return json.loads(p.read_text(encoding="utf-8"))
+    if KEYWORDS_PATH.exists():
+        try:
+            data = json.loads(KEYWORDS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                return [x.strip() for x in data if isinstance(x, str) and x.strip()]
+        except Exception:
+            pass
     return []
 
 
-def save_keywords(kws: List[str]) -> None:
-    Path(KEYWORDS_FILE).write_text(
-        json.dumps(kws, ensure_ascii=False, indent=2), encoding="utf-8"
+def save_keywords(keywords: List[str]) -> None:
+    KEYWORDS_PATH.write_text(
+        json.dumps(keywords, ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
 
-# ---------- Telegram helpers ----------
 
 def _post(method: str, **kwargs) -> dict:
     try:
-        r = httpx.post(f"{API}/{method}", json=kwargs, timeout=15)
+        r = httpx.post(f"{API}/{method}", json=kwargs, timeout=30)
         return r.json()
     except Exception as e:
-        logger.error("API error %s: %s", method, e)
+        logger.error("%s failed: %s", method, e)
         return {}
 
 
-def send(chat_id, text: str, reply_markup=None, parse_mode="MarkdownV2") -> None:
-    params = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+def send(chat_id, text: str, reply_markup=None, parse_mode="HTML") -> None:
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
     if reply_markup:
-        params["reply_markup"] = reply_markup
-    _post("sendMessage", **params)
+        payload["reply_markup"] = reply_markup
+    _post("sendMessage", **payload)
+
+
+def answer_callback(callback_query_id: str) -> None:
+    _post("answerCallbackQuery", callback_query_id=callback_query_id)
 
 
 def main_menu_keyboard():
@@ -85,8 +76,8 @@ def main_menu_keyboard():
                 {"text": "▶️ Запустити", "callback_data": "run"},
             ],
             [
-                {"text": "➕ Додати слово", "callback_data": "add_prompt"},
-                {"text": "➖ Видалити слово", "callback_data": "remove_prompt"},
+                {"text": "➕ Додати", "callback_data": "add_prompt"},
+                {"text": "➖ Видалити", "callback_data": "remove_prompt"},
             ],
             [
                 {"text": "📊 Статус", "callback_data": "status"},
@@ -95,174 +86,224 @@ def main_menu_keyboard():
     }
 
 
-def keywords_remove_keyboard(keywords: List[str]):
-    """Inline-кнопки для видалення: одна кнопка = одне слово."""
-    buttons = [
-        [{"text": f"❌ {kw}", "callback_data": f"del:{kw}"}]
-        for kw in keywords
-    ]
-    buttons.append([{"text": "« Назад", "callback_data": "back"}])
-    return {"inline_keyboard": buttons}
+def remove_keyboard(keywords: List[str]):
+    rows = [[{"text": f"❌ {kw}", "callback_data": f"del:{kw}"}] for kw in keywords]
+    rows.append([{"text": "⬅️ Назад", "callback_data": "back"}])
+    return {"inline_keyboard": rows}
 
-# ---------- scraper runner ----------
 
 def run_scraper(keywords: List[str]) -> str:
     if not keywords:
-        return "⚠️ Немає ключових слів для пошуку\\."
+        return "Немає ключових слів для запуску."
+
     cmd = [
-        sys.executable, "threads_scraper.py",
-        "--keywords", *keywords,
-        "--auth", DEFAULT_AUTH_FILE,
-        "--output", DEFAULT_OUTPUT_DIR,
-        "--max-posts-new", str(DEFAULT_MAX_POSTS_NEW_KEYWORD),
-        "--scroll-attempts", str(DEFAULT_SCROLL_ATTEMPTS),
+        sys.executable,
+        str(SCRAPER_PATH),
+        "--keywords",
+        *keywords,
+        "--auth",
+        str(BASE_DIR / DEFAULT_AUTH_FILE),
+        "--output",
+        str(BASE_DIR / DEFAULT_OUTPUT_DIR),
+        "--max-posts-new",
+        str(DEFAULT_MAX_POSTS_NEW_KEYWORD),
+        "--scroll-attempts",
+        str(DEFAULT_SCROLL_ATTEMPTS),
     ]
+
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-        last_lines = "\n".join(result.stdout.strip().splitlines()[-15:])
-        return f"✅ Готово\\!\n```\n{last_lines}\n```"
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=600,
+            cwd=str(BASE_DIR),
+        )
+        if result.returncode != 0:
+            tail = "\n".join((result.stderr or result.stdout).splitlines()[-15:])
+            return f"❌ Скрейпер завершився з помилкою:\n<pre>{tail}</pre>"
+
+        tail = "\n".join((result.stdout or "").splitlines()[-20:])
+        return f"✅ Скрейпер завершився успішно:\n<pre>{tail}</pre>"
     except subprocess.TimeoutExpired:
-        return "⏱ Парсинг перевищив 5 хвилин — перевір вручну\\."
+        return "⏱ Скрейпер перевищив таймаут."
     except Exception as e:
         return f"❌ Помилка запуску: {e}"
-
-# ---------- update handlers ----------
-
-_pending_action: dict = {}   # chat_id -> "add" | "remove"
 
 
 def handle_message(msg: dict) -> None:
     chat_id = msg["chat"]["id"]
     text = msg.get("text", "").strip()
-
-    # якщо очікуємо введення від юзера
     action = _pending_action.get(chat_id)
+
     if action == "add" and text and not text.startswith("/"):
-        kws = load_keywords()
-        if text not in kws:
-            kws.append(text)
-            save_keywords(kws)
-            send(chat_id, f"✅ Додано: *{text}*", parse_mode="Markdown")
+        keywords = load_keywords()
+        if text not in keywords:
+            keywords.append(text)
+            save_keywords(keywords)
+            send(chat_id, f"✅ Додано: <b>{text}</b>")
         else:
-            send(chat_id, f"ℹ️ *{text}* вже є у списку\\.", parse_mode="MarkdownV2")
+            send(chat_id, f"ℹ️ Уже є: <b>{text}</b>")
         _pending_action.pop(chat_id, None)
         return
 
-    cmd = text.split()[0].lower() if text else ""
+    if action == "remove" and text and not text.startswith("/"):
+        keywords = load_keywords()
+        if text in keywords:
+            keywords.remove(text)
+            save_keywords(keywords)
+            send(chat_id, f"🗑 Видалено: <b>{text}</b>")
+        else:
+            send(chat_id, f"ℹ️ Не знайдено: <b>{text}</b>")
+        _pending_action.pop(chat_id, None)
+        return
+
+    cmd = text.split(maxsplit=1)[0].lower() if text else ""
 
     if cmd in ("/start", "/menu"):
-        send(chat_id, "👋 *Threads Monitor*\nОбери дію:", reply_markup=main_menu_keyboard())
+        send(
+            chat_id,
+            "👋 <b>Threads Monitor</b>\nОбери дію:",
+            reply_markup=main_menu_keyboard(),
+        )
 
     elif cmd == "/list":
-        kws = load_keywords()
-        if kws:
-            body = "\n".join(f"• {kw}" for kw in kws)
-            send(chat_id, f"📋 *Ключові слова:*\n{body}", parse_mode="Markdown")
+        keywords = load_keywords()
+        if keywords:
+            body = "\n".join(f"• {kw}" for kw in keywords)
+            send(chat_id, f"📋 <b>Ключові слова:</b>\n{body}")
         else:
-            send(chat_id, "Список порожній\\. Додай слова через /add або кнопку\\.")
+            send(chat_id, "Список поки порожній.")
 
     elif cmd == "/add":
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
             _pending_action[chat_id] = "add"
-            send(chat_id, "✏️ Введи ключове слово для додавання:")
+            send(chat_id, "Напиши keyword одним повідомленням.")
             return
         kw = parts[1].strip()
-        kws = load_keywords()
-        if kw not in kws:
-            kws.append(kw)
-            save_keywords(kws)
-        send(chat_id, f"✅ Додано: *{kw}*", parse_mode="Markdown")
+        keywords = load_keywords()
+        if kw not in keywords:
+            keywords.append(kw)
+            save_keywords(keywords)
+        send(chat_id, f"✅ Додано: <b>{kw}</b>")
 
     elif cmd == "/remove":
         parts = text.split(maxsplit=1)
         if len(parts) < 2:
             kws = load_keywords()
-            send(chat_id, "Обери слово для видалення:", reply_markup=keywords_remove_keyboard(kws))
+            if kws:
+                send(chat_id, "Обери keyword для видалення:", reply_markup=remove_keyboard(kws))
+            else:
+                send(chat_id, "Список порожній.")
             return
         kw = parts[1].strip()
-        kws = load_keywords()
-        if kw in kws:
-            kws.remove(kw)
-            save_keywords(kws)
-            send(chat_id, f"🗑 Видалено: *{kw}*", parse_mode="Markdown")
-        else:
-            send(chat_id, f"ℹ️ *{kw}* не знайдено\\.")
+        keywords = load_keywords()
+        if kw in keywords:
+            keywords.remove(kw)
+            save_keywords(keywords)
+        send(chat_id, f"🗑 Видалено: <b>{kw}</b>")
 
     elif cmd == "/run":
-        kws = load_keywords()
-        send(chat_id, f"⏳ Запускаю парсинг для {len(kws)} слів\\.\\.\\.", parse_mode="MarkdownV2")
-        result_msg = run_scraper(kws)
+        keywords = load_keywords()
+        send(chat_id, f"⏳ Запуск для {len(keywords)} keyword(ів)...")
+        result_msg = run_scraper(keywords)
         send(chat_id, result_msg)
 
     elif cmd == "/status":
-        summary_path = Path(DEFAULT_OUTPUT_DIR) / "threads_search_summary.json"
+        summary_path = BASE_DIR / DEFAULT_OUTPUT_DIR / "threads_search_summary.json"
         if not summary_path.exists():
-            send(chat_id, "📭 Ще не було запусків\\.")
+            send(chat_id, "Ще не було запусків.")
             return
-        data = json.loads(summary_path.read_text(encoding="utf-8"))
-        total = data.get("all_new_posts_count", 0)
-        kw_count = data.get("keywords_count", 0)
-        send(chat_id, f"📊 Останній запуск:\n*{kw_count}* ключових слів, *{total}* нових постів\\.", parse_mode="MarkdownV2")
+        try:
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            send(
+                chat_id,
+                f"📊 <b>Останній запуск</b>\n"
+                f"• Keywordів: {data.get('keywords_count', 0)}\n"
+                f"• Нових постів: {data.get('all_new_posts_count', 0)}",
+            )
+        except Exception:
+            send(chat_id, "Не вдалося прочитати summary.")
+
+    else:
+        if text and not text.startswith("/"):
+            send(chat_id, "Напиши /start, щоб відкрити меню.")
 
 
 def handle_callback(cb: dict) -> None:
     chat_id = cb["message"]["chat"]["id"]
     data = cb.get("data", "")
-    _post("answerCallbackQuery", callback_query_id=cb["id"])
+    answer_callback(cb["id"])
 
     if data == "list":
-        kws = load_keywords()
-        body = "\n".join(f"• {kw}" for kw in kws) if kws else "Список порожній"
-        send(chat_id, f"📋 *Ключові слова:*\n{body}", parse_mode="Markdown")
+        keywords = load_keywords()
+        if keywords:
+            body = "\n".join(f"• {kw}" for kw in keywords)
+            send(chat_id, f"📋 <b>Ключові слова:</b>\n{body}")
+        else:
+            send(chat_id, "Список порожній.")
 
     elif data == "run":
-        kws = load_keywords()
-        send(chat_id, f"⏳ Запускаю\\.\\.\\.", parse_mode="MarkdownV2")
-        result_msg = run_scraper(kws)
+        keywords = load_keywords()
+        send(chat_id, f"⏳ Запуск для {len(keywords)} keyword(ів)...")
+        result_msg = run_scraper(keywords)
         send(chat_id, result_msg)
 
     elif data == "add_prompt":
         _pending_action[chat_id] = "add"
-        send(chat_id, "✏️ Введи ключове слово для додавання:")
+        send(chat_id, "Напиши keyword для додавання.")
 
     elif data == "remove_prompt":
         kws = load_keywords()
-        if not kws:
-            send(chat_id, "Список порожній\\.")
+        if kws:
+            send(chat_id, "Обери keyword для видалення:", reply_markup=remove_keyboard(kws))
         else:
-            send(chat_id, "Обери слово для видалення:", reply_markup=keywords_remove_keyboard(kws))
+            send(chat_id, "Список порожній.")
 
     elif data.startswith("del:"):
         kw = data[4:]
-        kws = load_keywords()
-        if kw in kws:
-            kws.remove(kw)
-            save_keywords(kws)
-        send(chat_id, f"🗑 Видалено: *{kw}*", parse_mode="Markdown")
+        keywords = load_keywords()
+        if kw in keywords:
+            keywords.remove(kw)
+            save_keywords(keywords)
+        send(chat_id, f"🗑 Видалено: <b>{kw}</b>")
 
     elif data == "status":
-        summary_path = Path(DEFAULT_OUTPUT_DIR) / "threads_search_summary.json"
+        summary_path = BASE_DIR / DEFAULT_OUTPUT_DIR / "threads_search_summary.json"
         if not summary_path.exists():
-            send(chat_id, "📭 Ще не було запусків\\.")
+            send(chat_id, "Ще не було запусків.")
             return
-        d = json.loads(summary_path.read_text(encoding="utf-8"))
-        total = d.get("all_new_posts_count", 0)
-        kw_count = d.get("keywords_count", 0)
-        send(chat_id, f"📊 Останній запуск: *{kw_count}* слів, *{total}* постів\\.", parse_mode="MarkdownV2")
+        try:
+            data = json.loads(summary_path.read_text(encoding="utf-8"))
+            send(
+                chat_id,
+                f"📊 <b>Останній запуск</b>\n"
+                f"• Keywordів: {data.get('keywords_count', 0)}\n"
+                f"• Нових постів: {data.get('all_new_posts_count', 0)}",
+            )
+        except Exception:
+            send(chat_id, "Не вдалося прочитати summary.")
 
     elif data == "back":
-        send(chat_id, "👋 *Threads Monitor*\nОбери дію:", reply_markup=main_menu_keyboard())
+        send(chat_id, "👋 <b>Threads Monitor</b>\nОбери дію:", reply_markup=main_menu_keyboard())
 
-
-# ---------- polling loop ----------
 
 def run_polling():
-    logger.info("Bot started (long polling)...")
+    if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN is empty")
+
+    logger.info("Bot started...")
     offset = 0
+
     while True:
         try:
-            resp = _post("getUpdates", offset=offset, timeout=30, allowed_updates=["message", "callback_query"])
+            resp = _post(
+                "getUpdates",
+                offset=offset,
+                timeout=30,
+                allowed_updates=["message", "callback_query"],
+            )
             for update in resp.get("result", []):
                 offset = update["update_id"] + 1
                 if "message" in update:
