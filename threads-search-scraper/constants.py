@@ -4,3 +4,8 @@ DEFAULT_STATE_FILE = "search_state.json"
 DEFAULT_MAX_POSTS_NEW_KEYWORD = 10
 DEFAULT_SCROLL_ATTEMPTS = 3
 THREADS_SEARCH_URL = "https://www.threads.net/search"
+
+# Telegram
+TELEGRAM_BOT_TOKEN = "8717244377:AAGelXOghUL3s36ORiHtSkImBIVdQ5H3gXA"      
+TELEGRAM_CHAT_ID   = "203071935"     
+KEYWORDS_FILE      = "keywords.json"  
