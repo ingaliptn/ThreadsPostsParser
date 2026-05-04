@@ -393,338 +393,172 @@ python -m playwright install chromium
 Такий порядок безпечніший, тому що спочатку перевіряється середовище і логін у Threads, а вже потім — фоновий сервіс.[9][2]
 
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+# Швидкі команди для запуску і перевірки
 
-# Threads Search Scraper + Telegram Bot: macOS Deployment Guide
+Нижче зібрані основні команди для запуску, перевірки та базового налаштування проєкту без пошуку по повному README.
 
-This guide describes how to take the project from GitHub and deploy it on an iMac running macOS so the machine acts as the always-on host for the Threads parser and Telegram bot.[1][2]
-
-## What this project needs
-
-The project depends on Python 3.8+ and Playwright with a Chromium browser installed locally, because the scraper uses Playwright to open Threads search pages and collect responses.[1][2]
-
-The deployment machine should have:
-
-- An iMac on macOS that can stay powered on and connected to the internet.
-- Access to the GitHub repository.
-- A Telegram bot token.
-- A valid `auth.json` session file for Threads.
-- Permission for the bot to send messages to users and, if enabled, to the log group.[3][2]
-
-## Recommended project layout
-
-Create a working folder like this on the iMac:
-
-```text
-/Users/<MAC_USERNAME>/apps/threads-search-scraper/
-```
-
-Inside it, the project should contain the scraper files, `auth.json`, `keywords.json`, `output/`, and the Python modules used by the bot and scraper.[4]
-
-## Step 1: Install Homebrew
-
-Open Terminal and install Homebrew if it is not already installed:
+## 1) Перейти в папку проєкту
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+cd ~/apps/threads-search-scraper
 ```
 
-Verify installation:
+## 2) Активувати virtual environment
 
 ```bash
-brew --version
-```
-
-Homebrew is the easiest way to install Python on macOS for this setup.[5]
-
-## Step 2: Install Python
-
-Install Python with Homebrew:
-
-```bash
-brew install python
-```
-
-Verify:
-
-```bash
-python3 --version
-pip3 --version
-```
-
-Playwright for Python supports Python 3.8 or higher on macOS.[1]
-
-## Step 3: Clone the repository
-
-Go to the target folder and clone the project:
-
-```bash
-mkdir -p ~/apps
-cd ~/apps
-git clone <YOUR_GITHUB_REPO_URL> threads-search-scraper
-cd threads-search-scraper
-```
-
-If the repository is already cloned, pull the latest version:
-
-```bash
-git pull
-```
-
-## Step 4: Create a virtual environment
-
-Create and activate a Python virtual environment:
-
-```bash
-python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-A virtual environment isolates package versions for the project and is the recommended way to manage Python dependencies for Playwright projects.[6][5]
-
-## Step 5: Install Python dependencies
-
-If the repository has a `requirements.txt`, run:
+## 3) Встановити залежності
 
 ```bash
 pip install -r requirements.txt
 ```
 
-If it does not, install the core dependencies manually:
-
-```bash
-pip install playwright httpx
-```
-
-If the project also uses other libraries, add them to `requirements.txt` and reinstall from that file for consistency.
-
-## Step 6: Install Playwright browser binaries
-
-Install Chromium for Playwright:
+## 4) Встановити Chromium для Playwright
 
 ```bash
 python -m playwright install chromium
 ```
 
-Playwright stores browser binaries separately and they must be installed after the Python package itself.[2]
+## 5) Зберегти сесію Threads
 
-If needed, install all Playwright browsers instead:
-
-```bash
-python -m playwright install
-```
-
-## Step 7: Add project runtime files
-
-Place the following files in the project root:
-
-- `auth.json` — Threads logged-in browser session.
-- `keywords.json` — array of keywords, for example:
-
-```json
-[
-  "тцк",
-  "azure",
-  "леді гага"
-]
-```
-
-- `constants.py` configured with the bot token and desired options.
-
-Example configuration:
-
-```python
-DEFAULT_AUTH_FILE = "auth.json"
-DEFAULT_OUTPUT_DIR = "output"
-DEFAULT_STATE_FILE = "search_state.json"
-DEFAULT_MAX_POSTS_NEW_KEYWORD = 10
-DEFAULT_SCROLL_ATTEMPTS = 3
-THREADS_SEARCH_URL = "https://www.threads.net/search"
-
-# Telegram
-TELEGRAM_BOT_TOKEN = "<BOT_TOKEN>"
-KEYWORDS_FILE = "keywords.json"
-LOG_CHAT_ID = "-5160568832"
-SEND_RUN_LOG_TO_USER = False
-SEND_SUMMARY_TO_USER = True
-```
-
-`LOG_CHAT_ID` can be a negative number if it is a Telegram group chat id, which is normal for group chats.[7][8]
-
-## Step 8: Test the scraper manually
-
-Activate the virtual environment and run a manual scraper test:
+Якщо є скрипт логіну:
 
 ```bash
-source .venv/bin/activate
+python login_and_save_session-4.py
+```
+
+Що робити далі:
+- відкриється браузер;
+- увійти в Threads / Instagram;
+- дочекатися завершення;
+- переконатися, що створився `auth.json`.
+
+## 6) Перевірити, чи існує і працює сесія
+
+```bash
+python check_session-13.py
+```
+
+Коментар:
+- це перевірка, чи файл сесії існує і чи його можна використати для авторизованого доступу.
+
+## 7) Перевірити, що `auth.json` реально є
+
+```bash
+ls -la auth.json
+```
+
+## 8) Перевірити ручний запуск скрейпера
+
+```bash
+python threads_scraper-10.py --keywords "azure" --max-posts-new 1 --scroll-attempts 1
+```
+
+Або, якщо у локальному репозиторії вже файл перейменований у нормальну назву:
+
+```bash
 python threads_scraper.py --keywords "azure" --max-posts-new 1 --scroll-attempts 1
 ```
 
-Expected result:
-
-- The script opens Threads through Playwright.
-- It writes JSON results to the `output/` folder.
-- It updates `output/search_state.json`.
-- It writes `output/threads_search_summary.json`.[4][2]
-
-## Step 9: Test the Telegram bot manually
-
-Run the bot:
+## 9) Перевірити, що summary створився
 
 ```bash
-source .venv/bin/activate
+ls -la output/threads_search_summary.json
+```
+
+## 10) Перевірити, що state створився
+
+```bash
+ls -la output/search_state.json
+```
+
+## 11) Запустити Telegram-бота вручну
+
+```bash
 python telegram_bot.py
 ```
 
-Then in Telegram:
+Після цього в Telegram:
+- відкрити чат з ботом;
+- написати `/start`;
+- додати keyword;
+- натиснути `Run`.
 
-1. Open the bot chat.
-2. Press `/start`.
-3. Add a test keyword if needed.
-4. Press `Run`.
-
-The current implementation uses Telegram long polling via `getUpdates`, which is suitable for a simple always-on bot on a personal machine.[3][9]
-
-## Step 10: Keep the bot running after login
-
-On macOS, the standard way to run a user process automatically is a LaunchAgent via `launchd`.[10][11]
-
-Create the folder if needed:
+## 12) Перевірити keywords-файл
 
 ```bash
-mkdir -p ~/Library/LaunchAgents
+cat keywords.json
 ```
 
-Create a file:
+## 13) Оновити код з GitHub
 
-```text
-~/Library/LaunchAgents/com.threadsparser.bot.plist
+```bash
+git pull
+source .venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium
 ```
 
-Use this template and replace `<MAC_USERNAME>` with the real macOS username:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.threadsparser.bot</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>/Users/<MAC_USERNAME>/apps/threads-search-scraper/.venv/bin/python</string>
-        <string>/Users/<MAC_USERNAME>/apps/threads-search-scraper/telegram_bot.py</string>
-    </array>
-
-    <key>WorkingDirectory</key>
-    <string>/Users/<MAC_USERNAME>/apps/threads-search-scraper</string>
-
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>KeepAlive</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/Users/<MAC_USERNAME>/apps/threads-search-scraper/output/launchd_stdout.log</string>
-
-    <key>StandardErrorPath</key>
-    <string>/Users/<MAC_USERNAME>/apps/threads-search-scraper/output/launchd_stderr.log</string>
-</dict>
-</plist>
-```
-
-Load it:
+## 14) Перезапустити LaunchAgent після оновлення
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.threadsparser.bot.plist 2>/dev/null
 launchctl load ~/Library/LaunchAgents/com.threadsparser.bot.plist
 ```
 
-Check status:
+## 15) Перевірити, чи LaunchAgent запущений
 
 ```bash
 launchctl list | grep threadsparser
 ```
 
-LaunchAgents are the normal macOS way to keep a user-scoped background process running after login.[10][11][12]
+## 16) Перевірити лог стандартного виводу
 
-## Updating the code later
+```bash
+tail -n 100 output/launchd_stdout.log
+```
 
-To update the project on the iMac:
+## 17) Перевірити лог помилок
+
+```bash
+tail -n 100 output/launchd_stderr.log
+```
+
+## 18) Типовий повний сценарій першого запуску
 
 ```bash
 cd ~/apps/threads-search-scraper
-git pull
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
-launchctl unload ~/Library/LaunchAgents/com.threadsparser.bot.plist
-launchctl load ~/Library/LaunchAgents/com.threadsparser.bot.plist
+python login_and_save_session-4.py
+python check_session-13.py
+python threads_scraper-10.py --keywords "azure" --max-posts-new 1 --scroll-attempts 1
+python telegram_bot.py
 ```
 
-Re-running `playwright install chromium` is safe and ensures the browser binary remains present after dependency changes.[2]
+## 19) Якщо у репозиторії будуть нормальні імена файлів
 
-## Troubleshooting
-
-### `python3: command not found`
-
-Python is not installed or not in PATH. Install it with Homebrew and verify with `python3 --version`.[5][1]
-
-### `ModuleNotFoundError`
-
-The virtual environment is not activated or dependencies were not installed. Activate `.venv` and run `pip install -r requirements.txt`.
-
-### `playwright: command not found`
-
-The Python package may not be installed in the active environment. Use:
+Після перейменування файлів команди бажано використовувати такі:
 
 ```bash
-python -m playwright install chromium
+python login_and_save_session.py
+python check_session.py
+python threads_scraper.py --keywords "azure" --max-posts-new 1 --scroll-attempts 1
+python telegram_bot.py
 ```
 
-This runs Playwright from the current Python environment and avoids PATH issues.[2][13]
+## 20) Швидка перевірка, що все готово
 
-### Browser does not launch
-
-Playwright requires its managed browser binaries to be installed locally. Re-run:
-
-```bash
-python -m playwright install chromium
-```
-
-If macOS blocks first launch, allow the app in system security settings and retry. Playwright uses a local Chromium binary for automation.[2][14]
-
-### Telegram log chat returns `chat not found`
-
-The bot is not in the target group, the group id is wrong, or the bot does not have permission to post there. Group chat ids can be negative, which is expected.[7][8][3]
-
-### The bot works, but no results are sent to a user
-
-The user must have started the bot chat first. Telegram bots cannot freely open a private chat with a user before the user interacts with the bot.[15][3]
-
-## Packaging checklist for handoff
-
-Before sending the project to the iMac owner, make sure the repository contains:
-
-- Source code files.
-- `requirements.txt`.
-- Example or template `keywords.json`.
-- This deployment guide.
-- A note explaining how to provide `auth.json` securely.
-
-Do not commit a real bot token or a personal `auth.json` into a public repository.
-
-## Recommended handoff sequence
-
-1. Push the latest working code to GitHub.
-2. Add `requirements.txt` if it is missing.
-3. Add this guide to the repository root as `README_DEPLOY_MACOS.md`.
-4. Send the repository URL to the iMac owner.
-5. Send `auth.json` securely outside GitHub.
-6. Walk through the first manual launch together.
-7. Enable LaunchAgent only after the manual run works.
-
-This two-stage approach reduces setup risk because it separates environment problems from background-service problems.[10][2]
+Ознаки, що налаштування коректне:
+- `python3 --version` працює;
+- `.venv` активується без помилок;
+- `pip install -r requirements.txt` проходить успішно;
+- `python -m playwright install chromium` завершується без помилок;
+- існує `auth.json`;
+- `check_session-13.py` не падає;
+- `threads_scraper.py` або `threads_scraper-10.py` створює файли в `output/`;
+- бот відповідає на `/start`.
