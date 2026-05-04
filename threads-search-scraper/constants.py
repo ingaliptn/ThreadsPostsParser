@@ -7,5 +7,9 @@ THREADS_SEARCH_URL = "https://www.threads.net/search"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = "8717244377:AAGelXOghUL3s36ORiHtSkImBIVdQ5H3gXA"      
-TELEGRAM_CHAT_ID   = "203071935"     
+# TELEGRAM_CHAT_ID   = "203071935"     
 KEYWORDS_FILE      = "keywords.json"  
+
+LOG_CHAT_ID = "-5160568832"  
+SEND_RUN_LOG_TO_USER = False
+SEND_SUMMARY_TO_USER = True

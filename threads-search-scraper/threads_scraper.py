@@ -10,15 +10,12 @@ from constants import (
     DEFAULT_OUTPUT_DIR,
     DEFAULT_SCROLL_ATTEMPTS,
     DEFAULT_STATE_FILE,
-    TELEGRAM_BOT_TOKEN,
-    TELEGRAM_CHAT_ID,
 )
 from file_store import FileStore
 from page_actions import PageActions
 from payload_parser import PayloadParser
 from scraper import ThreadsScraper
 from state_manager import StateManager
-from telegram_notifier import send_posts, send_summary
 
 
 def main():
@@ -84,29 +81,6 @@ def main():
         max_posts_new_keyword=args.max_posts_new,
         scroll_attempts=args.scroll_attempts,
     )
-
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        for item in summary["results"]:
-            if item.get("error"):
-                continue
-
-            keyword = item.get("keyword", "")
-            posts_new = item.get("posts_new", [])
-
-            if posts_new:
-                sent_count = send_posts(
-                    token=TELEGRAM_BOT_TOKEN,
-                    chat_id=TELEGRAM_CHAT_ID,
-                    posts=posts_new,
-                    keyword=keyword,
-                )
-                print(f"[{keyword}] telegram sent: {sent_count}/{len(posts_new)}")
-
-        send_summary(
-            token=TELEGRAM_BOT_TOKEN,
-            chat_id=TELEGRAM_CHAT_ID,
-            summary=summary,
-        )
 
     print("=" * 80)
     print(f"keywords_count: {summary['keywords_count']}")
