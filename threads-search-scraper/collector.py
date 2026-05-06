@@ -38,13 +38,15 @@ class SearchCollector:
             except Exception:
                 parsed_json = None
 
-            self.captured_responses.append({
-                "status": response.status,
-                "url": response.url,
-                "content_type": content_type,
-                "body_preview": body_text[:2000],
-                "json": parsed_json,
-            })
+            self.captured_responses.append(
+                {
+                    "status": response.status,
+                    "url": response.url,
+                    "content_type": content_type,
+                    "body_preview": body_text[:2000],
+                    "json": parsed_json,
+                }
+            )
         except Exception:
             pass
 
@@ -54,11 +56,13 @@ class SearchCollector:
             return
 
         try:
-            self.request_log.append({
-                "method": request.method,
-                "url": request.url,
-                "post_data": request.post_data
-            })
+            self.request_log.append(
+                {
+                    "method": request.method,
+                    "url": request.url,
+                    "post_data": request.post_data,
+                }
+            )
         except Exception:
             pass
 
@@ -97,17 +101,23 @@ class SearchCollector:
         is_new_keyword = not previous_last_seen_post_id
 
         new_posts: List[ThreadsPost] = []
+        previous_post_found = False
 
         if is_new_keyword:
             new_posts = posts[:max_posts_new_keyword]
         else:
             for post in posts:
                 if post.post_id == previous_last_seen_post_id:
+                    previous_post_found = True
                     break
                 new_posts.append(post)
 
-        if new_posts:
-            keyword_state["last_seen_post_id"] = new_posts[0].post_id
+            if not previous_post_found:
+                new_posts = []
+                recent_reason = f"{recent_reason}|previous_last_seen_post_not_found"
+
+        if posts:
+            keyword_state["last_seen_post_id"] = posts[0].post_id
 
         if not keyword_state.get("first_seen_run_at"):
             keyword_state["first_seen_run_at"] = now_iso()
@@ -123,6 +133,7 @@ class SearchCollector:
             "recent_reason": recent_reason,
             "is_new_keyword": is_new_keyword,
             "previous_last_seen_post_id": previous_last_seen_post_id,
+            "previous_post_found": previous_post_found,
             "current_last_seen_post_id": keyword_state.get("last_seen_post_id"),
             "users_count": len(users),
             "posts_count_total_seen": len(posts),
